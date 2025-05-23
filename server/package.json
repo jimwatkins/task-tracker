@@ -7,12 +7,14 @@
     "start": "node dist/index.js",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
-    "test": "jest",
+    "test": "vitest run",
     "init-db": "ts-node src/db/init.ts",
     "browse-db": "ts-node src/db/browse.ts",
     "seed": "ts-node src/db/seed.ts",
     "clear": "ts-node src/db/clear.ts",
-    "test-graphql": "ts-node src/test-graphql.ts"
+    "test-graphql": "ts-node src/test-graphql.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts"
   },
   "keywords": [],
   "author": "",
