@@ -1,54 +1,78 @@
-# React + TypeScript + Vite
+# Task Tracker
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A modern task management application built with React, Material-UI, and GraphQL.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Modern Material-UI based interface
+- Real-time task updates with GraphQL subscriptions
+- Task management (create, read, update, delete)
+- User profiles and task assignments
+- Multi-tenant support
 
-## Expanding the ESLint configuration
+## Tech Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- Frontend:
+  - React with TypeScript
+  - Material-UI for styling
+  - Apollo Client for GraphQL
+  - React Router for navigation
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+- Backend:
+  - Node.js with Express
+  - Apollo Server
+  - DynamoDB for data storage
+  - TypeScript
+
+## Getting Started
+
+1. Clone the repository
+2. Install dependencies:
+   ```bash
+   # Install frontend dependencies
+   npm install
+
+   # Install backend dependencies
+   cd server
+   npm install
+   ```
+
+3. Start the development servers:
+   ```bash
+   # Start frontend (from root directory)
+   npm run dev
+
+   # Start backend (from server directory)
+   cd server
+   npm run dev
+   ```
+
+4. Open http://localhost:5173 in your browser
+
+## Project Structure
+
+```
+task-tracker/
+├── src/                    # Frontend source code
+│   ├── components/        # Reusable components
+│   ├── pages/            # Page components
+│   ├── graphql/          # GraphQL operations and schema
+│   └── App.tsx           # Main application component
+├── server/               # Backend source code
+│   ├── src/
+│   │   ├── resolvers/   # GraphQL resolvers
+│   │   ├── db/         # Database operations
+│   │   └── index.ts    # Server entry point
+│   └── package.json
+└── package.json
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Development
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- Frontend runs on http://localhost:5173
+- GraphQL server runs on http://localhost:4001/graphql
+- GraphQL Playground available at http://localhost:4001/graphql
 
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
-```
+## License
+
+MIT
