@@ -1,0 +1,33 @@
+@startuml
+!theme plain
+
+entity "User" as User {
+  * id : string <<PK>>
+  --
+  name : string
+  email : string
+  role : string
+  tenantId : string
+}
+
+entity "Task" as Task {
+  * id : string <<PK>>
+  --
+  title : string
+  description : string
+  status : string
+  dueDate : string
+  assignedToId : string
+  createdById : string
+  tenantId : string
+  createdAt : string
+  updatedAt : string
+}
+
+User ||..o{ Task : assignedToId
+User ||..o{ Task : createdById
+
+User }|..|{ "User GSI" : tenantId
+Task }|..|{ "Task GSI" : tenantId
+
+@enduml 

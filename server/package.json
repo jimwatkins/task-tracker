@@ -1,0 +1,39 @@
+{
+  "name": "task-tracker-server",
+  "version": "1.0.0",
+  "description": "GraphQL server for task tracker application",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "node dist/index.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "build": "tsc",
+    "test": "jest",
+    "init-db": "ts-node src/db/init.ts",
+    "browse-db": "ts-node src/db/browse.ts",
+    "seed": "ts-node src/db/seed.ts",
+    "clear": "ts-node src/db/clear.ts",
+    "test-graphql": "ts-node src/test-graphql.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@apollo/server": "^4.10.0",
+    "@aws-sdk/client-dynamodb": "^3.525.0",
+    "@aws-sdk/lib-dynamodb": "^3.525.0",
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "graphql": "^16.8.1",
+    "node-fetch": "^2.7.0",
+    "react-icons": "^5.5.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.19",
+    "@types/node-fetch": "^2.6.11",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.3.3"
+  }
+}
