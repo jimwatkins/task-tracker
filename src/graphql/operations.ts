@@ -38,7 +38,6 @@ export const GET_TASK = gql`
       completionDate
       priority
       isRecurring
-      assignedToId
       assignedTo {
         id
         name
@@ -104,30 +103,8 @@ export const CREATE_TASK = gql`
 `;
 
 export const UPDATE_TASK = gql`
-  mutation UpdateTask(
-    $id: Int!
-    $title: String
-    $description: String
-    $status: TaskStatus
-    $dueDate: String
-    $scheduledDate: String
-    $completionDate: String
-    $priority: Priority
-    $isRecurring: Boolean
-    $assignedToId: Int
-  ) {
-    updateTask(input: {
-      id: $id
-      title: $title
-      description: $description
-      status: $status
-      dueDate: $dueDate
-      scheduledDate: $scheduledDate
-      completionDate: $completionDate
-      priority: $priority
-      isRecurring: $isRecurring
-      assignedToId: $assignedToId
-    }) {
+  mutation UpdateTask($input: UpdateTaskInput!) {
+    updateTask(input: $input) {
       id
       title
       description

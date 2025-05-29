@@ -1,8 +1,14 @@
 import { Task, User, CreateTaskInput, UpdateTaskInput, Priority } from './types';
-import { TABLES } from './db/dynamodb'; // Keep TABLES import
-import { ScanCommand, QueryCommand, GetCommand, PutCommand, UpdateCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
-import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
-import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { TABLES } from './db/dynamodb';
+import { 
+  ScanCommand, 
+  QueryCommand, 
+  GetItemCommand, 
+  PutItemCommand, 
+  UpdateItemCommand, 
+  DeleteItemCommand,
+  AttributeValue
+} from '@aws-sdk/client-dynamodb';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { IResolvers } from '@graphql-tools/utils';
 
@@ -15,14 +21,78 @@ const client = new DynamoDBClient({
   },
 });
 
-const docClient = DynamoDBDocumentClient.from(client); // Use the local docClient
+// Helper function to convert JavaScript values to DynamoDB AttributeValue
+const toDynamoDBValue = (value: any): AttributeValue => {
+  if (typeof value === 'number') {
+    return { N: value.toString() };
+  }
+  if (typeof value === 'string') {
+    return { S: value };
+  }
+  if (typeof value === 'boolean') {
+    return { BOOL: value };
+  }
+  if (value === null || value === undefined) {
+    return { NULL: true };
+  }
+  if (Array.isArray(value)) {
+    return { L: value.map(toDynamoDBValue) };
+  }
+  if (typeof value === 'object') {
+    return { M: Object.fromEntries(Object.entries(value).map(([k, v]) => [k, toDynamoDBValue(v)])) };
+  }
+  throw new Error(`Unsupported value type: ${typeof value}`);
+};
+
+// Helper function to convert DynamoDB item to Task
+const convertDynamoItemToTask = (item: Record<string, AttributeValue>): Task => {
+  return {
+    id: Number(item.id.N),
+    title: item.title.S!,
+    description: item.description?.S || null,
+    status: item.status.S!,
+    dueDate: item.dueDate?.S || null,
+    scheduledDate: item.scheduledDate?.S || null,
+    completionDate: item.completionDate?.S || null,
+    priority: item.priority?.S || null,
+    isRecurring: item.isRecurring?.BOOL || false,
+    assignedToId: item.assignedToId ? Number(item.assignedToId.N) : null,
+    createdById: Number(item.createdById.N),
+    tenantId: item.tenantId.S!,
+    createdAt: item.createdAt.S!,
+    updatedAt: item.updatedAt.S!,
+  } as Task;
+};
+
+// Helper function to convert DynamoDB item to User
+const convertDynamoItemToUser = (item: Record<string, AttributeValue>): User => {
+  return {
+    id: Number(item.id.N),
+    name: item.name.S!,
+    email: item.email.S!,
+    role: item.role.S!,
+    tenantId: item.tenantId.S!,
+  } as User;
+};
 
 export const resolvers: IResolvers = {
   Query: {
     tasks: async (_: any, { tenantId }: { tenantId: string }) => {
-      console.log(`[Tasks Resolver] Fetching tasks for tenant: ${tenantId}`);
+      console.log(`[Tasks Resolver] Starting task fetch for tenant: ${tenantId}`);
 
       try {
+        console.log('[Tasks Resolver] Building QueryCommand with params:', {
+          TableName: TABLES.TASKS,
+          IndexName: 'TenantIndex',
+          KeyConditionExpression: '#tenantId = :tenantId',
+          ExpressionAttributeNames: {
+            '#tenantId': 'tenantId',
+          },
+          ExpressionAttributeValues: {
+            ':tenantId': toDynamoDBValue(tenantId),
+          },
+        });
+
         const command = new QueryCommand({
           TableName: TABLES.TASKS,
           IndexName: 'TenantIndex',
@@ -31,26 +101,47 @@ export const resolvers: IResolvers = {
             '#tenantId': 'tenantId',
           },
           ExpressionAttributeValues: {
-            ':tenantId': tenantId,
+            ':tenantId': toDynamoDBValue(tenantId),
           },
         });
 
-        const response = await docClient.send(command);
-        let tasks = response.Items as Task[] || [];
+        console.log('[Tasks Resolver] Sending QueryCommand to DynamoDB...');
+        const response = await client.send(command);
+        console.log('[Tasks Resolver] Raw DynamoDB response:', JSON.stringify(response, null, 2));
 
-        console.log(`[Tasks Resolver] Found ${tasks.length} raw tasks for tenant: ${tenantId}`);
+        if (!response.Items || response.Items.length === 0) {
+          console.log('[Tasks Resolver] No tasks found in DynamoDB response');
+          return [];
+        }
+
+        console.log(`[Tasks Resolver] Found ${response.Items.length} raw items in DynamoDB response`);
+        let tasks = (response.Items || []).map(item => {
+          console.log('[Tasks Resolver] Converting DynamoDB item to Task:', JSON.stringify(item, null, 2));
+          const task = convertDynamoItemToTask(item);
+          console.log('[Tasks Resolver] Converted Task:', JSON.stringify(task, null, 2));
+          return task;
+        });
+
+        console.log(`[Tasks Resolver] Successfully converted ${tasks.length} tasks`);
 
         // Fetch associated User objects for createdBy and assignedTo
+        console.log('[Tasks Resolver] Starting user resolution for tasks');
         tasks = await Promise.all(tasks.map(async (task) => {
           console.log(`[Tasks Resolver] Resolving users for task ID: ${task.id}, createdById: ${task.createdById}, assignedToId: ${task.assignedToId}`);
 
           // Fetch createdBy User
-          const createdByUserCommand = new GetCommand({
+          console.log(`[Tasks Resolver] Fetching createdBy user with ID: ${task.createdById}`);
+          const createdByUserCommand = new GetItemCommand({
             TableName: TABLES.USERS,
-            Key: { id: task.createdById },
+            Key: { id: toDynamoDBValue(task.createdById) },
           });
-          const createdByUserResponse = await docClient.send(createdByUserCommand);
-          const createdBy = createdByUserResponse.Item as User | undefined;
+          console.log('[Tasks Resolver] CreatedBy GetItemCommand params:', JSON.stringify(createdByUserCommand.input, null, 2));
+          
+          const createdByUserResponse = await client.send(createdByUserCommand);
+          console.log('[Tasks Resolver] CreatedBy DynamoDB response:', JSON.stringify(createdByUserResponse, null, 2));
+          
+          const createdBy = createdByUserResponse.Item ? convertDynamoItemToUser(createdByUserResponse.Item) : undefined;
+          console.log('[Tasks Resolver] Converted createdBy user:', JSON.stringify(createdBy, null, 2));
 
           if (!createdBy) {
             console.error(`[Tasks Resolver ERROR] createdBy user with ID ${task.createdById} not found for task ${task.id}`);
@@ -59,91 +150,110 @@ export const resolvers: IResolvers = {
           // Fetch assignedTo User (if assignedToId exists)
           let assignedTo: User | undefined | null = null;
           if (task.assignedToId) {
-            const assignedToUserCommand = new GetCommand({
+            console.log(`[Tasks Resolver] Fetching assignedTo user with ID: ${task.assignedToId}`);
+            const assignedToUserCommand = new GetItemCommand({
               TableName: TABLES.USERS,
-              Key: { id: task.assignedToId },
+              Key: { id: toDynamoDBValue(task.assignedToId) },
             });
-            const assignedToUserResponse = await docClient.send(assignedToUserCommand);
-            assignedTo = assignedToUserResponse.Item as User | undefined;
+            console.log('[Tasks Resolver] AssignedTo GetItemCommand params:', JSON.stringify(assignedToUserCommand.input, null, 2));
+            
+            const assignedToUserResponse = await client.send(assignedToUserCommand);
+            console.log('[Tasks Resolver] AssignedTo DynamoDB response:', JSON.stringify(assignedToUserResponse, null, 2));
+            
+            assignedTo = assignedToUserResponse.Item ? convertDynamoItemToUser(assignedToUserResponse.Item) : undefined;
+            console.log('[Tasks Resolver] Converted assignedTo user:', JSON.stringify(assignedTo, null, 2));
 
-            if (task.assignedToId && !assignedTo) {
+            if (!assignedTo) {
               console.warn(`[Tasks Resolver WARNING] assignedTo user with ID ${task.assignedToId} not found for task ${task.id}`);
             }
           }
 
-          return { 
+          const finalTask = { 
             ...task,
             createdBy: createdBy,
             assignedTo: assignedTo,
-            scheduledDate: task.scheduledDate || null,
-            completionDate: task.completionDate || null,
-            priority: task.priority || null,
-            isRecurring: task.isRecurring || false,
           } as Task;
+          console.log('[Tasks Resolver] Final task with resolved users:', JSON.stringify(finalTask, null, 2));
+          return finalTask;
         }));
 
-        console.log(`[Tasks Resolver] Returning ${tasks.length} tasks with resolved users for tenant: ${tenantId}`);
+        console.log(`[Tasks Resolver] Successfully resolved all users for ${tasks.length} tasks`);
         return tasks;
       } catch (error) {
-        console.error('[Tasks Resolver ERROR] Error fetching tasks from DynamoDB and resolving users:', error);
+        console.error('[Tasks Resolver ERROR] Error details:', {
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+          error: error
+        });
         throw new Error('Failed to fetch tasks with users.');
       }
     },
     task: async (_: any, { id }: { id: number }) => {
+      // Temporary error test
+      if (id === 999) {
+        throw new Error('Test error: This is a simulated server error');
+      }
+      
       console.log(`[Task Resolver] Fetching task with ID: ${id}`);
       try {
-        const command = new GetCommand({
+        const command = new GetItemCommand({
           TableName: TABLES.TASKS,
           Key: {
-            id: Number(id), // Ensure ID is a number
+            id: toDynamoDBValue(id),
           },
         });
 
-        const response = await docClient.send(command);
-        const task = response.Item as Task | undefined;
+        const response = await client.send(command);
+        console.log('[Task Resolver] DynamoDB Get Response:', JSON.stringify(response, null, 2));
 
-        if (!task) {
-          console.log(`[Task Resolver] Task with ID ${id} not found.`);
+        if (!response.Item) {
+          console.warn(`[Task Resolver WARNING] Task with ID ${id} not found.`);
           return null;
         }
 
-        console.log(`[Task Resolver] Found raw task: ${task.title}`);
+        const task = convertDynamoItemToTask(response.Item);
+        console.log(`[Task Resolver] Converted task:`, task);
 
         // Fetch createdBy User
-        const createdByUserCommand = new GetCommand({
+        console.log(`[Task Resolver] Fetching createdBy user with ID: ${task.createdById}`);
+        const createdByUserCommand = new GetItemCommand({
           TableName: TABLES.USERS,
-          Key: { id: Number(task.createdById) }, // Ensure ID is a number
+          Key: { id: toDynamoDBValue(task.createdById) },
         });
-        const createdByUserResponse = await docClient.send(createdByUserCommand);
-        const createdBy = createdByUserResponse.Item as User | undefined;
-
-        // Fetch assignedTo User (if assignedToId exists)
-        let assignedTo: User | undefined | null = null;
-        if (task.assignedToId != null) {
-          const assignedToUserCommand = new GetCommand({
-            TableName: TABLES.USERS,
-            Key: { id: Number(task.assignedToId) }, // Ensure ID is a number
-          });
-          const assignedToUserResponse = await docClient.send(assignedToUserCommand);
-          assignedTo = assignedToUserResponse.Item as User | undefined;
-        }
+        const createdByUserResponse = await client.send(createdByUserCommand);
+        const createdBy = createdByUserResponse.Item ? convertDynamoItemToUser(createdByUserResponse.Item) : undefined;
 
         if (!createdBy) {
           console.error(`[Task Resolver ERROR] createdBy user with ID ${task.createdById} not found for task ${task.id}`);
+          throw new Error(`User with ID ${task.createdById} not found.`);
         }
 
-        console.log(`[Task Resolver] Returning task with resolved users and new fields for ID: ${id}`);
-        return { 
+        // Fetch assignedTo User (if assignedToId exists)
+        let assignedTo: User | undefined | null = null;
+        if (task.assignedToId) {
+          console.log(`[Task Resolver] Fetching assignedTo user with ID: ${task.assignedToId}`);
+          const assignedToUserCommand = new GetItemCommand({
+            TableName: TABLES.USERS,
+            Key: { id: toDynamoDBValue(task.assignedToId) },
+          });
+          const assignedToUserResponse = await client.send(assignedToUserCommand);
+          assignedTo = assignedToUserResponse.Item ? convertDynamoItemToUser(assignedToUserResponse.Item) : undefined;
+
+          if (!assignedTo) {
+            console.warn(`[Task Resolver WARNING] assignedTo user with ID ${task.assignedToId} not found for task ${task.id}`);
+          }
+        }
+
+        const finalTask = {
           ...task,
-          createdBy: createdBy,
-          assignedTo: assignedTo,
-          scheduledDate: task.scheduledDate || null,
-          completionDate: task.completionDate || null,
-          priority: task.priority || null,
-          isRecurring: task.isRecurring || false,
-        } as Task;
+          createdBy,
+          assignedTo,
+        };
+
+        console.log(`[Task Resolver] Returning task with resolved users:`, finalTask);
+        return finalTask;
       } catch (error) {
-        console.error(`[Task Resolver ERROR] Error fetching task with ID ${id} from DynamoDB and resolving users:`, error);
+        console.error('[Task Resolver ERROR] Error fetching task from DynamoDB:', error);
         throw new Error('Failed to fetch task.');
       }
     },
@@ -158,20 +268,15 @@ export const resolvers: IResolvers = {
             '#tenantId': 'tenantId',
           },
           ExpressionAttributeValues: {
-            ':tenantId': tenantId,
+            ':tenantId': toDynamoDBValue(tenantId),
           },
         });
 
-        const response = await docClient.send(command);
+        const response = await client.send(command);
         console.log('[Users Resolver] DynamoDB Query Response (Users):', JSON.stringify(response, null, 2));
 
-        // Convert string ID to number (still needed as QueryCommand might return as strings)
-        const users = (response.Items as User[] || []).map(user => ({
-          ...user,
-          id: typeof user.id === 'string' ? parseInt(user.id) : user.id
-        }));
-
-        console.log(`[Users Resolver] Found ${users.length} users for tenant: ${tenantId}`);
+        const users = (response.Items || []).map(convertDynamoItemToUser);
+        console.log(`[Users Resolver] Returning ${users.length} users for tenant: ${tenantId}`);
         return users;
       } catch (error) {
         console.error('[Users Resolver ERROR] Error fetching users from DynamoDB:', error);
@@ -181,33 +286,26 @@ export const resolvers: IResolvers = {
     user: async (_: any, { id }: { id: number }) => {
       console.log(`[User Resolver] Fetching user with ID: ${id}`);
       try {
-        const command = new GetCommand({
+        const command = new GetItemCommand({
           TableName: TABLES.USERS,
           Key: {
-            id: id, // Pass number ID directly
+            id: toDynamoDBValue(id),
           },
         });
 
-        const response = await docClient.send(command);
+        const response = await client.send(command);
         console.log('[User Resolver] DynamoDB Get Response (User):', JSON.stringify(response, null, 2));
 
-        const user = response.Item as User | undefined;
-
-        if (!user) {
-          console.log(`[User Resolver] User with ID ${id} not found.`);
+        if (!response.Item) {
+          console.warn(`[User Resolver WARNING] User with ID ${id} not found.`);
           return null;
         }
 
-        // Convert string ID to number for consistency if needed
-         const userWithNumericId = {
-          ...user,
-          id: typeof user.id === 'string' ? parseInt(user.id) : user.id,
-        };
-
-        console.log(`[User Resolver] Found user: ${userWithNumericId.name}`);
-        return userWithNumericId;
+        const user = convertDynamoItemToUser(response.Item);
+        console.log(`[User Resolver] Returning user:`, user);
+        return user;
       } catch (error) {
-        console.error(`[User Resolver ERROR] Error fetching user with ID ${id} from DynamoDB:`, error);
+        console.error('[User Resolver ERROR] Error fetching user from DynamoDB:', error);
         throw new Error('Failed to fetch user.');
       }
     },
@@ -215,35 +313,30 @@ export const resolvers: IResolvers = {
 
   Mutation: {
     createTask: async (_: any, { input }: { input: CreateTaskInput }) => {
-      console.log('[createTask Mutation] Creating task:', input);
+      console.log('[createTask Mutation] Input:', input);
       try {
-        // Get the next available ID by scanning the table
-        // Note: This approach has potential race conditions in a high-concurrency environment.
-        // A better approach would involve using a dedicated counter table or DynamoDB sequences.
+        // Generate a new task ID
         const scanCommand = new ScanCommand({
           TableName: TABLES.TASKS,
           ProjectionExpression: 'id',
         });
-        const scanResponse = await docClient.send(scanCommand);
-        const existingIds = (scanResponse.Items || []).map(item => item.id);
+        const scanResponse = await client.send(scanCommand);
+        const existingIds = (scanResponse.Items || []).map(item => Number(item.id.N));
         const taskId = Math.max(0, ...existingIds) + 1;
 
-        const now = new Date().toISOString();
-
         // Fetch the createdBy user to include in the response
-        const createdByUserCommand = new GetCommand({
+        const createdByUserCommand = new GetItemCommand({
           TableName: TABLES.USERS,
-          Key: { id: input.createdById },
+          Key: { id: toDynamoDBValue(input.createdById) },
         });
-        const createdByUserResponse = await docClient.send(createdByUserCommand);
-        const createdBy = createdByUserResponse.Item as User | undefined;
+        const createdByUserResponse = await client.send(createdByUserCommand);
+        const createdBy = createdByUserResponse.Item ? convertDynamoItemToUser(createdByUserResponse.Item) : undefined;
 
         if (!createdBy) {
-          console.error(`[createTask Mutation ERROR] Creator user with ID ${input.createdById} not found.`);
-          throw new Error(`Creator user with ID ${input.createdById} not found.`);
+          throw new Error(`User with ID ${input.createdById} not found.`);
         }
 
-        // Include new fields in the task object
+        const now = new Date().toISOString();
         const newTask = {
           id: taskId,
           title: input.title,
@@ -255,186 +348,166 @@ export const resolvers: IResolvers = {
           priority: input.priority || null,
           isRecurring: input.isRecurring || false,
           assignedToId: input.assignedToId || null,
-          tenantId: input.tenantId,
           createdById: input.createdById,
+          tenantId: input.tenantId,
           createdAt: now,
           updatedAt: now,
         };
 
-        const command = new PutCommand({
+        const command = new PutItemCommand({
           TableName: TABLES.TASKS,
-          Item: newTask,
+          Item: Object.fromEntries(
+            Object.entries(newTask).map(([key, value]) => [key, toDynamoDBValue(value)])
+          ),
         });
 
-        await docClient.send(command);
+        await client.send(command);
         console.log(`[createTask Mutation] Task created successfully with ID: ${taskId}`);
 
-        return { ...newTask, createdBy: createdBy, assignedTo: null } as Task;
+        // Fetch assignedTo user if assignedToId is provided
+        let assignedTo: User | undefined | null = null;
+        if (input.assignedToId) {
+          const assignedToUserCommand = new GetItemCommand({
+            TableName: TABLES.USERS,
+            Key: { id: toDynamoDBValue(input.assignedToId) },
+          });
+          const assignedToUserResponse = await client.send(assignedToUserCommand);
+          assignedTo = assignedToUserResponse.Item ? convertDynamoItemToUser(assignedToUserResponse.Item) : undefined;
+
+          if (!assignedTo) {
+            console.warn(`[createTask Mutation WARNING] assignedTo user with ID ${input.assignedToId} not found.`);
+          }
+        }
+
+        return {
+          ...newTask,
+          createdBy: createdBy,
+          assignedTo: assignedTo,
+        } as Task;
       } catch (error) {
-        console.error('[createTask Mutation ERROR] Error creating task in DynamoDB:', error);
+        console.error('[createTask Mutation ERROR] Error creating task:', error);
         throw new Error('Failed to create task.');
       }
     },
     updateTask: async (_: any, { input }: { input: UpdateTaskInput }) => {
-      console.log('[updateTask Mutation] Updating task:', input);
-      const { id, title, description, status, dueDate, scheduledDate, completionDate, priority, isRecurring, assignedToId } = input;
-      const now = new Date().toISOString();
-
-      const updateExpressionParts: string[] = [];
-      const expressionAttributeNames: Record<string, string> = {};
-      const expressionAttributeValues: Record<string, any> = {};
-
-      // Helper to add update expression part if value is defined (and not null for non-nullable fields)
-      const addUpdate = (fieldName: string, value: any, attributeName: string) => {
-          // Check for explicit null for nullable fields to use REMOVE
-          if (value === null) {
-              updateExpressionParts.push(`REMOVE #${attributeName}`);
-              expressionAttributeNames[`#${attributeName}`] = fieldName;
-          } else if (value !== undefined) { // Check for undefined to know if the field was provided in the input
-               updateExpressionParts.push(`SET #${attributeName} = :${attributeName}`);
-               expressionAttributeNames[`#${attributeName}`] = fieldName;
-               expressionAttributeValues[`:${attributeName}`] = value;
-          }
-      };
-
-      addUpdate('title', title, 'title');
-      addUpdate('description', description, 'description');
-      addUpdate('status', status, 'status');
-      addUpdate('dueDate', dueDate, 'dueDate');
-      addUpdate('scheduledDate', scheduledDate, 'scheduledDate');
-      addUpdate('completionDate', completionDate, 'completionDate');
-      addUpdate('priority', priority, 'priority');
-      // isRecurring is boolean, handle undefined/null specifically if needed
-      if (isRecurring !== undefined) {
-           if (isRecurring === null) { // Treat null as removing the attribute
-             updateExpressionParts.push('REMOVE #isRecurring');
-             expressionAttributeNames['#isRecurring'] = 'isRecurring';
-           } else {
-              updateExpressionParts.push('SET #isRecurring = :isRecurring');
-              expressionAttributeNames['#isRecurring'] = 'isRecurring';
-              expressionAttributeValues[':isRecurring'] = isRecurring;
-           }
-      }
-
-      if (assignedToId !== undefined) {
-          if (assignedToId === null) {
-              // If assignedToId is set to null, remove the attribute
-               updateExpressionParts.push('REMOVE #assignedToId');
-               expressionAttributeNames['#assignedToId'] = 'assignedToId';
-          } else {
-             // Ensure the assignedToId exists as a user before attempting to assign
-              const assignedToUserCommand = new GetCommand({
-                TableName: TABLES.USERS,
-                Key: { id: assignedToId },
-              });
-              const assignedToUserResponse = await docClient.send(assignedToUserCommand);
-              const assignedToUser = assignedToUserResponse.Item as User | undefined;
-
-              if (!assignedToUser) {
-                console.error(`[updateTask Mutation ERROR] AssignedTo user with ID ${assignedToId} not found.`);
-                throw new Error(`AssignedTo user with ID ${assignedToId} not found.`);
-              }
-            updateExpressionParts.push('SET #assignedToId = :assignedToId');
-            expressionAttributeNames['#assignedToId'] = 'assignedToId';
-            expressionAttributeValues[':assignedToId'] = assignedToId;
-          }
-      }
-
-      // Add updatedAt timestamp
-      updateExpressionParts.push('#updatedAt = :updatedAt');
-      expressionAttributeNames['#updatedAt'] = 'updatedAt';
-      expressionAttributeValues[':updatedAt'] = now;
-
-      // Only proceed if there are fields to update
-      if (Object.keys(expressionAttributeNames).length === 1 && expressionAttributeNames['#updatedAt'] === 'updatedAt') { // Check if only updatedAt is being updated
-           console.warn(`[updateTask Mutation] No updatable fields provided for task ID ${id}. Only updatedAt will be updated.`);
-           // Proceed with update, but maybe return the existing task instead? Or just the updated timestamp?
-           // For now, proceed with update and return ALL_NEW
-      }
-
-      const updateExpression = 'SET ' + updateExpressionParts.join(', ');
-
+      console.log(`[updateTask Mutation] Updating task with input:`, input);
       try {
-        const command = new UpdateCommand({
+        // First, get the current task to ensure it exists and to get the current values
+        const getCommand = new GetItemCommand({
           TableName: TABLES.TASKS,
           Key: {
-            id: id,
+            id: toDynamoDBValue(input.id),
           },
-          UpdateExpression: updateExpression,
-          ExpressionAttributeNames: expressionAttributeNames,
-          ExpressionAttributeValues: expressionAttributeValues,
-          ReturnValues: 'ALL_NEW', // Return the updated item
         });
 
-        const response = await docClient.send(command);
+        const getResponse = await client.send(getCommand);
+        if (!getResponse.Item) {
+          throw new Error(`Task with ID ${input.id} not found.`);
+        }
+
+        const currentTask = convertDynamoItemToTask(getResponse.Item);
+        const now = new Date().toISOString();
+
+        // Prepare the update expression and attribute values
+        const updateExpressions: string[] = [];
+        const expressionAttributeNames: Record<string, string> = {};
+        const expressionAttributeValues: Record<string, AttributeValue> = {};
+
+        // Helper function to add an update expression
+        const addUpdateExpression = (key: string, value: any) => {
+          const attributeName = `#${key}`;
+          const attributeValue = `:${key}`;
+          expressionAttributeNames[attributeName] = key;
+          expressionAttributeValues[attributeValue] = toDynamoDBValue(value);
+          updateExpressions.push(`${attributeName} = ${attributeValue}`);
+        };
+
+        // Add update expressions for each field that is provided in the input
+        if (input.title !== undefined) addUpdateExpression('title', input.title);
+        if (input.description !== undefined) addUpdateExpression('description', input.description);
+        if (input.status !== undefined) addUpdateExpression('status', input.status);
+        if (input.dueDate !== undefined) addUpdateExpression('dueDate', input.dueDate);
+        if (input.scheduledDate !== undefined) addUpdateExpression('scheduledDate', input.scheduledDate);
+        if (input.completionDate !== undefined) addUpdateExpression('completionDate', input.completionDate);
+        if (input.priority !== undefined) addUpdateExpression('priority', input.priority);
+        if (input.isRecurring !== undefined) addUpdateExpression('isRecurring', input.isRecurring);
+        if (input.assignedToId !== undefined) addUpdateExpression('assignedToId', input.assignedToId);
+        addUpdateExpression('updatedAt', now);
+
+        const command = new UpdateItemCommand({
+          TableName: TABLES.TASKS,
+          Key: {
+            id: toDynamoDBValue(input.id),
+          },
+          UpdateExpression: `SET ${updateExpressions.join(', ')}`,
+          ExpressionAttributeNames: expressionAttributeNames,
+          ExpressionAttributeValues: expressionAttributeValues,
+          ReturnValues: 'ALL_NEW',
+        });
+
+        const response = await client.send(command);
         console.log('[updateTask Mutation] DynamoDB Update Response:', JSON.stringify(response, null, 2));
 
-        const updatedTask = response.Attributes as Task | undefined;
-
-        if (!updatedTask) {
-             // This case should ideally not happen if ReturnValues is ALL_NEW and the key exists
-             throw new Error(`[updateTask Mutation ERROR] Task with ID ${id} not found after update.`);
+        if (!response.Attributes) {
+          throw new Error('Failed to update task.');
         }
-         // Fetch createdBy and assignedTo for the updated task before returning
-            const createdByUserCommand = new GetCommand({
-                TableName: TABLES.USERS,
-                Key: { id: updatedTask.createdById },
-            });
-            const createdByUserResponse = await docClient.send(createdByUserCommand);
-            const createdBy = createdByUserResponse.Item as User | undefined;
 
-            let assignedTo: User | undefined | null = null;
-             if (updatedTask.assignedToId != null) {
-                const assignedToUserCommand = new GetCommand({
-                  TableName: TABLES.USERS,
-                  Key: { id: updatedTask.assignedToId },
-                });
-                const assignedToUserResponse = await docClient.send(assignedToUserCommand);
-                assignedTo = assignedToUserResponse.Item as User | undefined;
-            }
+        const updatedTask = convertDynamoItemToTask(response.Attributes);
 
-        console.log(`[updateTask Mutation] Task updated successfully with ID: ${id}`);
-        // Include new fields in the returned task
-        return { 
-            ...updatedTask,
-            createdBy: createdBy,
-            assignedTo: assignedTo,
-            scheduledDate: updatedTask.scheduledDate || null,
-            completionDate: updatedTask.completionDate || null,
-            priority: updatedTask.priority || null,
-            isRecurring: updatedTask.isRecurring || false,
+        // Fetch createdBy and assignedTo for the updated task before returning
+        const createdByUserCommand = new GetItemCommand({
+          TableName: TABLES.USERS,
+          Key: { id: toDynamoDBValue(updatedTask.createdById) },
+        });
+        const createdByUserResponse = await client.send(createdByUserCommand);
+        const createdBy = createdByUserResponse.Item ? convertDynamoItemToUser(createdByUserResponse.Item) : undefined;
+
+        let assignedTo: User | undefined | null = null;
+        if (updatedTask.assignedToId != null) {
+          const assignedToUserCommand = new GetItemCommand({
+            TableName: TABLES.USERS,
+            Key: { id: toDynamoDBValue(updatedTask.assignedToId) },
+          });
+          const assignedToUserResponse = await client.send(assignedToUserCommand);
+          assignedTo = assignedToUserResponse.Item ? convertDynamoItemToUser(assignedToUserResponse.Item) : undefined;
+        }
+
+        return {
+          ...updatedTask,
+          createdBy: createdBy,
+          assignedTo: assignedTo,
         } as Task;
       } catch (error) {
-        console.error(`[updateTask Mutation ERROR] Error updating task with ID ${id} from DynamoDB:`, error);
+        console.error('[updateTask Mutation ERROR] Error updating task:', error);
         throw new Error('Failed to update task.');
       }
     },
-    deleteTask: async (_: any, { id }: { id: number }) => { // Change ID type to number
+    deleteTask: async (_: any, { id }: { id: number }) => {
       console.log(`[deleteTask Mutation] Deleting task with ID: ${id}`);
       try {
-         // Optional: Check if task exists before attempting deletion
-         const getCommand = new GetCommand({
-             TableName: TABLES.TASKS,
-             Key: { id: id } // Pass number ID directly
-         });
-         const getResponse = await docClient.send(getCommand);
-         if (!getResponse.Item) {
-             console.warn(`[deleteTask Mutation WARNING] Task with ID ${id} not found for deletion.`);
-             return false; // Indicate not found or already deleted
-         }
+        // Optional: Check if task exists before attempting deletion
+        const getCommand = new GetItemCommand({
+          TableName: TABLES.TASKS,
+          Key: { id: toDynamoDBValue(id) },
+        });
+        const getResponse = await client.send(getCommand);
+        if (!getResponse.Item) {
+          console.warn(`[deleteTask Mutation WARNING] Task with ID ${id} not found for deletion.`);
+          return false;
+        }
 
-        const command = new DeleteCommand({
+        const command = new DeleteItemCommand({
           TableName: TABLES.TASKS,
           Key: {
-            id: id, // Pass number ID directly
+            id: toDynamoDBValue(id),
           },
         });
 
-        await docClient.send(command);
+        await client.send(command);
         console.log(`[deleteTask Mutation] Task deleted successfully with ID: ${id}`);
-        return true; // Indicate successful deletion
+        return true;
       } catch (error) {
-        console.error(`[deleteTask Mutation ERROR] Error deleting task with ID ${id} from DynamoDB:`, error);
+        console.error('[deleteTask Mutation ERROR] Error deleting task:', error);
         throw new Error('Failed to delete task.');
       }
     },

@@ -19,7 +19,7 @@ async function startServer() {
   const server = new ApolloServer({
     typeDefs,
     resolvers,
-    introspection: true,
+    introspection: true
   });
   console.log('Apollo Server instance created');
 

@@ -1,341 +1,196 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@apollo/client';
-import { GET_TASK, UPDATE_TASK } from '../graphql/operations'; // Adjust path as needed
-import {
-  Container,
-  Paper,
-  Typography,
-  TextField,
-  Button,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  FormControlLabel,
-  Checkbox,
-  Box,
-  Chip,
-  CircularProgress,
-  Alert,
-  Stack,
-} from '@mui/material';
-import type { SelectChangeEvent } from '@mui/material/Select';
-import type { GridProps } from '@mui/material/Grid';
-import Grid from '@mui/material/Grid';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
-import { format } from 'date-fns';
+import { GET_TASK, UPDATE_TASK } from '../graphql/operations';
+import type { Task } from '../types';
+import { TaskStatus } from '../types';
+import { Box, Typography, TextField, Button, MenuItem, CircularProgress, Alert } from '@mui/material';
+import { useSnackbar } from 'notistack';
 
-interface TaskData {
-  task: {
-    id: number;
-    title: string;
-    description?: string | null;
-    status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
-    dueDate?: string | null;
-    scheduledDate?: string | null;
-    completionDate?: string | null;
-    priority?: 'LOW' | 'MEDIUM' | 'HIGH' | null;
-    isRecurring?: boolean | null;
-    assignedToId?: number | null;
-    assignedTo?: { id: number; name: string } | null;
-    createdBy: { id: number; name: string };
-    createdAt: string;
-    updatedAt: string;
-  } | null;
-}
-
-interface UpdateTaskInput {
-  id: number;
-  title?: string | null;
-  description?: string | null;
-  status?: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | null;
-  dueDate?: string | null;
-  scheduledDate?: string | null;
-  completionDate?: string | null;
-  priority?: 'LOW' | 'MEDIUM' | 'HIGH' | null;
-  isRecurring?: boolean | null;
-  assignedToId?: number | null;
-}
-
-const EditTask: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+const EditTask = () => {
+  const { id: idParam } = useParams<{ id: string }>();
+  const id = idParam ? parseInt(idParam, 10) : null;
   const navigate = useNavigate();
-
-  const taskId = id ? parseInt(id) : null;
-
-  const { loading, error, data } = useQuery<TaskData>(GET_TASK, {
-    variables: { id: taskId },
-    skip: taskId === null,
-  });
-
-  const [updateTaskMutation] = useMutation(UPDATE_TASK);
-
-  const [formData, setFormData] = useState<UpdateTaskInput>({
-    id: taskId || 0,
+  const { enqueueSnackbar } = useSnackbar();
+  const [formData, setFormData] = useState<Partial<Task>>({
     title: '',
     description: '',
-    status: 'NOT_STARTED',
+    status: TaskStatus.NOT_STARTED,
     dueDate: '',
-    scheduledDate: '',
-    completionDate: '',
-    priority: null,
-    isRecurring: false,
-    assignedToId: null,
+  });
+
+  const { loading, error, data } = useQuery(GET_TASK, {
+    variables: { id },
+    fetchPolicy: 'network-only',
+    errorPolicy: 'all',
+    skip: !id,
+  });
+
+  const [updateTask, { loading: updating }] = useMutation(UPDATE_TASK, {
+    onCompleted: (data) => {
+      console.log('Mutation completed successfully:', data);
+      enqueueSnackbar('Task updated successfully', { variant: 'success' });
+      navigate('/tasks');
+    },
+    onError: (error) => {
+      console.error('Error updating task:', error);
+      console.error('Error details:', {
+        message: error.message,
+        graphQLErrors: error.graphQLErrors,
+        networkError: error.networkError,
+        stack: error.stack,
+      });
+      enqueueSnackbar(error.message, { variant: 'error' });
+    },
   });
 
   useEffect(() => {
     if (data?.task) {
+      console.log('Received task data:', data.task);
       setFormData({
-        id: data.task.id,
-        title: data.task.title || '',
+        title: data.task.title,
         description: data.task.description || '',
-        status: data.task.status || 'NOT_STARTED',
-        dueDate: data.task.dueDate || '',
-        scheduledDate: data.task.scheduledDate || '',
-        completionDate: data.task.completionDate || '',
-        priority: data.task.priority || null,
-        isRecurring: data.task.isRecurring || false,
-        assignedToId: data.task.assignedToId || null,
+        status: data.task.status,
+        dueDate: data.task.dueDate ? new Date(data.task.dueDate).toISOString().split('T')[0] : '',
       });
     }
   }, [data]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target;
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id || !data?.task) return;
 
-    if (type === 'checkbox' && e.target instanceof HTMLInputElement) {
-      setFormData({
-        ...formData,
-        [name]: e.target.checked,
-      });
-    } else {
-      setFormData({
-        ...formData,
-        [name]: value,
-      });
-    }
-  };
+    console.log('Current formData:', formData);
+    console.log('Current task data:', data.task);
 
-  const handleSelectChange = (e: SelectChangeEvent) => {
-    const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value,
+    const input = {
+      id,
+      title: formData.title,
+      description: formData.description,
+      status: formData.status,
+      dueDate: formData.dueDate ? new Date(formData.dueDate).toISOString() : null,
+    };
+
+    console.log('Mutation input:', input);
+    console.log('Mutation variables:', { input });
+
+    updateTask({
+      variables: {
+        input,
+      },
+    }).catch(error => {
+      console.error('Mutation error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        graphQLErrors: error.graphQLErrors,
+        networkError: error.networkError,
+        stack: error.stack,
+      });
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!id) return;
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+        <CircularProgress />
+      </Box>
+    );
+  }
 
-    try {
-      await updateTaskMutation({
-        variables: {
-          input: {
-            id,
-            ...(formData.title !== '' && { title: formData.title }),
-            ...(formData.description !== '' && { description: formData.description }),
-            ...(formData.status !== 'NOT_STARTED' && { status: formData.status }),
-            ...(formData.dueDate !== '' && { dueDate: formData.dueDate }),
-            ...(formData.scheduledDate !== '' && { scheduledDate: formData.scheduledDate }),
-            ...(formData.completionDate !== '' && { completionDate: formData.completionDate }),
-            ...(formData.priority !== null && { priority: formData.priority }),
-            ...(formData.isRecurring !== undefined && { isRecurring: formData.isRecurring }),
-            ...(formData.assignedToId !== null && { assignedToId: formData.assignedToId }),
-          },
-        },
-      });
-      navigate('/tasks');
-    } catch (err) {
-      console.error('Error updating task:', err);
-    }
-  };
+  if (error) {
+    return (
+      <Box p={3}>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error.message}
+        </Alert>
+        <Button variant="contained" onClick={() => navigate('/tasks')}>
+          Back to Tasks
+        </Button>
+      </Box>
+    );
+  }
 
-  if (loading) return (
-    <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
-      <CircularProgress />
-    </Box>
-  );
-  
-  if (error) return (
-    <Container maxWidth="md" sx={{ mt: 4 }}>
-      <Alert severity="error">Error loading task: {error.message}</Alert>
-    </Container>
-  );
-  
-  if (!data?.task) return (
-    <Container maxWidth="md" sx={{ mt: 4 }}>
-      <Alert severity="warning">Task not found.</Alert>
-    </Container>
-  );
+  if (!data?.task) {
+    return (
+      <Box p={3}>
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Task not found
+        </Alert>
+        <Button variant="contained" onClick={() => navigate('/tasks')}>
+          Back to Tasks
+        </Button>
+      </Box>
+    );
+  }
 
   return (
-    <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
-      <Paper elevation={3} sx={{ p: 4 }}>
-        <Stack spacing={3}>
-          <Box display="flex" justifyContent="space-between" alignItems="center">
-            <Typography variant="h4" component="h1" gutterBottom>
-              Edit Task
-            </Typography>
-            <Chip 
-              label={formData.status?.replace('_', ' ') || 'Not Started'} 
-              color={
-                formData.status === 'COMPLETED' ? 'success' :
-                formData.status === 'IN_PROGRESS' ? 'primary' :
-                'default'
-              }
-            />
-          </Box>
-
-          <form onSubmit={handleSubmit}>
-            <Stack spacing={3}>
-              <Box>
-                <TextField
-                  fullWidth
-                  label="Title"
-                  id="title"
-                  name="title"
-                  value={formData.title || ''}
-                  onChange={handleChange}
-                  required
-                  variant="outlined"
-                />
-              </Box>
-
-              <Box>
-                <TextField
-                  fullWidth
-                  label="Description"
-                  id="description"
-                  name="description"
-                  value={formData.description || ''}
-                  onChange={handleChange}
-                  multiline
-                  rows={4}
-                  variant="outlined"
-                />
-              </Box>
-
-              <Box display="flex" gap={3}>
-                <Box flex={1}>
-                  <FormControl fullWidth>
-                    <InputLabel id="status-label">Status</InputLabel>
-                    <Select
-                      labelId="status-label"
-                      id="status"
-                      name="status"
-                      value={formData.status || ''}
-                      onChange={handleSelectChange}
-                      label="Status"
-                      required
-                    >
-                      <MenuItem value="NOT_STARTED">Not Started</MenuItem>
-                      <MenuItem value="IN_PROGRESS">In Progress</MenuItem>
-                      <MenuItem value="COMPLETED">Completed</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Box>
-
-                <Box flex={1}>
-                  <FormControl fullWidth>
-                    <InputLabel id="priority-label">Priority</InputLabel>
-                    <Select
-                      labelId="priority-label"
-                      id="priority"
-                      name="priority"
-                      value={formData.priority || ''}
-                      onChange={handleSelectChange}
-                      label="Priority"
-                    >
-                      <MenuItem value="">Select Priority</MenuItem>
-                      <MenuItem value="LOW">Low</MenuItem>
-                      <MenuItem value="MEDIUM">Medium</MenuItem>
-                      <MenuItem value="HIGH">High</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Box>
-              </Box>
-
-              <Box display="flex" gap={3}>
-                <Box flex={1}>
-                  <LocalizationProvider dateAdapter={AdapterDateFns}>
-                    <DatePicker
-                      label="Due Date"
-                      value={formData.dueDate ? new Date(formData.dueDate) : null}
-                      onChange={(newValue: Date | null) => {
-                        setFormData({
-                          ...formData,
-                          dueDate: newValue ? format(newValue, 'yyyy-MM-dd') : '',
-                        });
-                      }}
-                      slotProps={{
-                        textField: {
-                          fullWidth: true,
-                          variant: 'outlined',
-                        },
-                      }}
-                    />
-                  </LocalizationProvider>
-                </Box>
-
-                <Box flex={1}>
-                  <LocalizationProvider dateAdapter={AdapterDateFns}>
-                    <DatePicker
-                      label="Scheduled Date"
-                      value={formData.scheduledDate ? new Date(formData.scheduledDate) : null}
-                      onChange={(newValue: Date | null) => {
-                        setFormData({
-                          ...formData,
-                          scheduledDate: newValue ? format(newValue, 'yyyy-MM-dd') : '',
-                        });
-                      }}
-                      slotProps={{
-                        textField: {
-                          fullWidth: true,
-                          variant: 'outlined',
-                        },
-                      }}
-                    />
-                  </LocalizationProvider>
-                </Box>
-              </Box>
-
-              <Box>
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      id="isRecurring"
-                      name="isRecurring"
-                      checked={formData.isRecurring || false}
-                      onChange={handleChange}
-                    />
-                  }
-                  label="Is Recurring Task"
-                />
-              </Box>
-
-              <Box display="flex" gap={2} justifyContent="flex-end">
-                <Button
-                  variant="outlined"
-                  onClick={() => navigate('/tasks')}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  variant="contained"
-                  color="primary"
-                >
-                  Save Changes
-                </Button>
-              </Box>
-            </Stack>
-          </form>
-        </Stack>
-      </Paper>
-    </Container>
+    <Box component="form" onSubmit={handleSubmit} sx={{ maxWidth: 600, mx: 'auto', p: 3 }}>
+      <Typography variant="h4" gutterBottom>
+        Edit Task
+      </Typography>
+      
+      <TextField
+        fullWidth
+        label="Title"
+        value={formData.title}
+        onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+        required
+        margin="normal"
+      />
+      
+      <TextField
+        fullWidth
+        label="Description"
+        value={formData.description}
+        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+        multiline
+        rows={4}
+        margin="normal"
+      />
+      
+      <TextField
+        fullWidth
+        select
+        label="Status"
+        value={formData.status}
+        onChange={(e) => setFormData({ ...formData, status: e.target.value as TaskStatus })}
+        margin="normal"
+      >
+        {Object.values(TaskStatus).map((status) => (
+          <MenuItem key={status} value={status}>
+            {status}
+          </MenuItem>
+        ))}
+      </TextField>
+      
+      <TextField
+        fullWidth
+        label="Due Date"
+        type="date"
+        value={formData.dueDate}
+        onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+        margin="normal"
+        InputLabelProps={{ shrink: true }}
+      />
+      
+      <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
+        <Button
+          type="submit"
+          variant="contained"
+          color="primary"
+          disabled={updating}
+        >
+          {updating ? <CircularProgress size={24} /> : 'Save Changes'}
+        </Button>
+        <Button
+          variant="outlined"
+          onClick={() => navigate('/tasks')}
+          disabled={updating}
+        >
+          Cancel
+        </Button>
+      </Box>
+    </Box>
   );
 };
 
