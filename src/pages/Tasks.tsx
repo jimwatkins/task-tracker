@@ -13,6 +13,8 @@ import {
   Button,
   Stack,
 } from '@mui/material';
+import { getErrorMessage } from '../utils/errorHandling';
+import { setErrorMessage } from '../graphql/cache';
 
 // Assuming a Task type is generated and available, e.g., from a GraphQL codegen process
 // You might need to adjust the import path based on your actual generated types file
@@ -53,6 +55,10 @@ const statusConfig = {
 const Tasks = () => {
   const { loading, error, data } = useQuery(GET_TASKS, {
     variables: { tenantId: 'tenant1' }, // TODO: Get this from auth context
+    onError: (error) => {
+      const errorDetails = getErrorMessage(error);
+      setErrorMessage(errorDetails.message);
+    },
   });
 
   if (loading) {
@@ -66,16 +72,16 @@ const Tasks = () => {
   if (error) {
     return (
       <Container maxWidth="md" sx={{ mt: 4 }}>
-        <Alert 
-          severity="error"
-          action={
-            <Button color="inherit" size="small" onClick={() => window.location.reload()}>
-              Retry
-            </Button>
-          }
-        >
-          Could not load tasks: {error.message}
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {getErrorMessage(error).message}
         </Alert>
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={() => window.location.reload()}
+        >
+          Retry
+        </Button>
       </Container>
     );
   }
@@ -83,70 +89,72 @@ const Tasks = () => {
   const tasks = data?.tasks || [];
 
   return (
-    <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
-      <Stack spacing={3}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          Seasonal Tasks
+    <Container maxWidth="lg" sx={{ mt: 4 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
+        <Typography variant="h4" component="h1">
+          Tasks
         </Typography>
-
-        <Paper elevation={2}>
-          <Stack spacing={0}>
-            {tasks.map((task: Task) => {
-              const config = statusConfig[task.status];
-              return (
-                <Link 
-                  to={`/tasks/${task.id}/edit`} 
-                  key={task.id}
-                  style={{ textDecoration: 'none', color: 'inherit' }}
-                >
-                  <Box
-                    sx={{
-                      p: 2,
-                      borderBottom: '1px solid',
-                      borderColor: 'divider',
-                      '&:last-child': {
-                        borderBottom: 'none',
-                      },
-                      '&:hover': {
-                        bgcolor: 'action.hover',
-                      },
-                    }}
-                  >
-                    <Stack direction="row" justifyContent="space-between" alignItems="center">
-                      <Box>
-                        <Typography variant="h6" gutterBottom>
-                          {task.title}
-                        </Typography>
-                        {task.description && (
-                          <Typography variant="body2" color="text.secondary">
-                            {task.description}
-                          </Typography>
-                        )}
-                      </Box>
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          px: 1.5,
-                          py: 0.5,
-                          borderRadius: 1,
-                          bgcolor: `${config.color}.lighter`,
-                          color: `${config.color}.main`,
-                          border: 1,
-                          borderColor: `${config.color}.light`,
-                        }}
-                      >
-                        {config.icon}
-                        {config.label}
-                      </Box>
-                    </Stack>
-                  </Box>
-                </Link>
-              );
-            })}
-          </Stack>
-        </Paper>
+        <Button
+          component={Link}
+          to="/tasks/new"
+          variant="contained"
+          color="primary"
+        >
+          Create Task
+        </Button>
       </Stack>
+
+      {tasks.length === 0 ? (
+        <Paper sx={{ p: 3, textAlign: 'center' }}>
+          <Typography variant="body1" color="text.secondary">
+            No tasks found. Create your first task!
+          </Typography>
+        </Paper>
+      ) : (
+        <Stack spacing={2}>
+          {tasks.map((task: Task) => (
+            <Paper
+              key={task.id}
+              sx={{
+                p: 2,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <Box>
+                <Typography variant="h6" component="h2">
+                  {task.title}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {task.description}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Assigned to: {task.assignedTo?.name || 'Unassigned'}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Typography
+                  variant="body2"
+                  color={`${statusConfig[task.status].color}.main`}
+                  sx={{ display: 'flex', alignItems: 'center' }}
+                >
+                  {statusConfig[task.status].icon}
+                  {statusConfig[task.status].label}
+                </Typography>
+                <Button
+                  component={Link}
+                  to={`/tasks/${task.id}/edit`}
+                  variant="outlined"
+                  size="small"
+                >
+                  Edit
+                </Button>
+              </Box>
+            </Paper>
+          ))}
+        </Stack>
+      )}
     </Container>
   );
 };
