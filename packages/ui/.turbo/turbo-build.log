@@ -1,0 +1,19 @@
+
+> @task-tracker/ui@0.0.0 build D:\projs\task-tracker\packages\ui
+> tsup
+
+[34mCLI[39m Building entry: src/index.ts
+[34mCLI[39m Using tsconfig: tsconfig.json
+[34mCLI[39m tsup v8.5.0
+[34mCLI[39m Using tsup config: D:\projs\task-tracker\packages\ui\tsup.config.ts
+[34mCLI[39m Target: es2020
+[34mCLI[39m Cleaning output folder
+[34mESM[39m Build start
+[34mCJS[39m Build start
+[32mESM[39m [1mdist\index.mjs     [22m[32m45.76 KB[39m
+[32mESM[39m [1mdist\index.mjs.map [22m[32m402.10 KB[39m
+[32mESM[39m ⚡️ Build success in 683ms
+[32mCJS[39m [1mdist\index.js     [22m[32m47.87 KB[39m
+[32mCJS[39m [1mdist\index.js.map [22m[32m402.10 KB[39m
+[32mCJS[39m ⚡️ Build success in 746ms
+[34mDTS[39m Build start

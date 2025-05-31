@@ -1,0 +1,21 @@
+{
+  "extends": "@task-tracker/config/typescript/react-library.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "jsx": "react-jsx",
+    "esModuleInterop": true,
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "noEmit": false
+  },
+  "include": ["src"],
+  "references": [
+    
+    { "path": "../../packages/ui" },
+    { "path": "../../packages/types" }
+  ]
+}

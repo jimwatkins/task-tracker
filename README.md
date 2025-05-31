@@ -1,40 +1,54 @@
 # Task Tracker Application
 
-A full-stack task management application built with React, TypeScript, and GraphQL.
+A modern full-stack task management application built with Next.js, TypeScript, and GraphQL, using a monorepo structure.
 
 ## Project Structure
 
 ```
 task-tracker/
-├── src/                 # Frontend source code
-├── server/             # Backend GraphQL server
-├── public/             # Static assets
-├── docs/              # Documentation
-└── docker/            # Docker configuration
+├── apps/              # Application packages
+│   ├── web/          # Next.js frontend application
+│   └── server/       # Backend GraphQL server
+├── packages/         # Shared packages
+│   ├── ui/          # Shared UI components
+│   ├── config/      # Shared configuration
+│   └── types/       # Shared TypeScript types
+├── tools/           # Development tools and scripts
+├── docs/            # Documentation
+├── docker/          # Docker configuration
+└── .github/         # GitHub workflows and templates
 ```
 
 ## Tech Stack
 
 ### Frontend
-- React 18.2.0
+- Next.js 14
 - TypeScript 5.3.3
-- Vite 5.1.3
-- Apollo Client 3.9.5
-- Material-UI 5.15.11
-- React Router 6.22.1
+- TailwindCSS
+- Shadcn UI
+- Apollo Client
+- React Query
 
 ### Backend
 - Node.js
 - TypeScript
-- Apollo Server 4.10.0
-- Express 4.18.2
+- Apollo Server
+- Express
 - AWS DynamoDB
+
+### Development Tools
+- pnpm (Package Manager)
+- Turborepo (Build System)
+- ESLint 9.x
+- TypeScript
+- Docker
 
 ## Getting Started
 
 ### Prerequisites
 - Node.js (Latest LTS version)
-- npm (Latest version)
+- pnpm (Latest version)
+- Docker (for local development)
 - AWS DynamoDB (for backend)
 
 ### Installation
@@ -45,60 +59,41 @@ git clone <repository-url>
 cd task-tracker
 ```
 
-2. Install frontend dependencies:
+2. Install dependencies:
 ```bash
-npm install
-```
-
-3. Install backend dependencies:
-```bash
-cd server
-npm install
-cd ..
+pnpm install
 ```
 
 ### Running the Application
 
-1. Start the backend server:
+1. Start the development environment:
 ```bash
-cd server
-npm run dev
+pnpm dev
 ```
-The GraphQL server will start on http://localhost:4001
 
-2. In a new terminal, start the frontend development server:
-```bash
-npm run dev
-```
-The frontend will be available at http://localhost:5173
+This will start:
+- Frontend: http://localhost:5173
+- Backend: http://localhost:4001
 
 ### Development Scripts
 
-#### Frontend
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run lint` - Run ESLint
-- `npm run preview` - Preview production build
+#### Root Workspace
+- `pnpm dev` - Start all applications in development mode
+- `pnpm build` - Build all packages and applications
+- `pnpm lint` - Run ESLint across all packages
+- `pnpm test` - Run tests across all packages
 
-#### Backend
-- `npm run dev` - Start development server with hot reload
-- `npm run build` - Build TypeScript
-- `npm run start` - Start production server
-- `npm run init-db` - Initialize database
-- `npm run seed` - Seed database with sample data
-- `npm run clear` - Clear database
-- `npm run test-graphql` - Test GraphQL queries
+#### Web Application
+- `pnpm dev:web` - Start frontend development server
+- `pnpm build:web` - Build frontend for production
+- `pnpm start:web` - Start production frontend server
 
-## Database Schema
-
-The application uses AWS DynamoDB with the following tables:
-- Users
-- Tasks
-
-### Sample Data
-The application comes with sample data including:
-- Users with different roles (ADMIN, MANAGER, USER)
-- Tasks with various statuses and priorities
+#### Backend Server
+- `pnpm dev:server` - Start backend development server
+- `pnpm build:server` - Build backend for production
+- `pnpm start:server` - Start production backend server
+- `pnpm init-db` - Initialize database
+- `pnpm seed` - Seed database with sample data
 
 ## Features
 - Task management (CRUD operations)
@@ -108,13 +103,16 @@ The application comes with sample data including:
 - Priority levels
 - Due date tracking
 - Recurring tasks
+- Real-time updates
+- Responsive design
+- Dark/Light mode
 
 ## Contributing
 1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a new Pull Request
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 This project is licensed under the ISC License.

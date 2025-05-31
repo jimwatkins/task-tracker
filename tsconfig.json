@@ -1,7 +1,15 @@
 {
-  "files": [],
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "skipLibCheck": true
+  },
   "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
+    { "path": "./packages/types" },
+    { "path": "./packages/ui" },
+    { "path": "./packages/config" },
+    { "path": "./apps/web" },
+    { "path": "./apps/server" }
   ]
 }

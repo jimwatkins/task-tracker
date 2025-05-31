@@ -1,0 +1,6 @@
+
+> @task-tracker/server@0.0.0 build D:\projs\task-tracker\apps\server
+> tsc
+
+src/resolvers.ts(1,72): error TS2307: Cannot find module '@task-tracker/types' or its corresponding type declarations.
+ ELIFECYCLE  Command failed with exit code 2.
