@@ -12,7 +12,8 @@
     "init-db": "tsx src/db/init.ts",
     "seed": "tsx src/db/seed.ts",
     "clear": "tsx src/db/clear.ts",
-    "test-graphql": "tsx src/test-graphql.ts"
+    "test-graphql": "tsx src/test-graphql.ts",
+    "codegen": "graphql-codegen --config codegen.ts"
   },
   "keywords": [],
   "author": "",
@@ -32,6 +33,9 @@
     "graphql-tag": "^2.12.6"
   },
   "devDependencies": {
+    "@graphql-codegen/cli": "^5.0.2",
+    "@graphql-codegen/typescript": "^4.0.6",
+    "@graphql-codegen/typescript-resolvers": "^4.5.1",
     "@task-tracker/config": "workspace:*",
     "@types/body-parser": "^1.19.5",
     "@types/cors": "^2.8.13",

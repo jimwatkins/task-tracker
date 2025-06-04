@@ -26,7 +26,11 @@ export const typeDefs: DocumentNode = gql`
     status: TaskStatus!
     priority: Priority!
     dueDate: String
+    scheduledDate: String
+    completionDate: String
+    isRecurring: Boolean
     createdBy: User!
+    assignedTo: User
     createdAt: String!
     updatedAt: String!
   }
@@ -39,9 +43,9 @@ export const typeDefs: DocumentNode = gql`
   }
 
   type Query {
-    tasks: [Task!]!
+    tasks(tenantId: String!): [Task!]!
     task(id: ID!): Task
-    users: [User!]!
+    users(tenantId: String!): [User!]!
     user(id: ID!): User
   }
 

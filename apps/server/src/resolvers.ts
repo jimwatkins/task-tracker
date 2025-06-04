@@ -11,6 +11,8 @@ import {
 } from '@aws-sdk/client-dynamodb';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { IResolvers } from '@graphql-tools/utils';
+import { Resolvers } from './generated/graphql';
+import { TaskStatus, UserRole } from './generated/graphql';
 
 const client = new DynamoDBClient({
   region: 'local',
@@ -75,9 +77,37 @@ const convertDynamoItemToUser = (item: Record<string, AttributeValue>): User => 
   } as User;
 };
 
-const resolvers = {
+// Mock data for development
+const tasks = [
+  {
+    id: '1',
+    title: 'Implement GraphQL API',
+    description: 'Create a GraphQL API for the task tracker',
+    status: TaskStatus.InProgress,
+    priority: Priority.High,
+    dueDate: '2024-03-01',
+    createdBy: {
+      id: '1',
+      email: 'admin@example.com',
+      name: 'Admin User',
+      role: UserRole.Admin,
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+];
+
+const users = [
+  {
+    id: '1',
+    email: 'admin@example.com',
+    name: 'Admin User',
+    role: UserRole.Admin,
+  },
+];
+
+const resolvers: Resolvers = {
   Query: {
-    hello: () => 'Hello World!',
     tasks: async (_: any, { tenantId }: { tenantId: string }) => {
       console.log(`[Tasks Resolver] Starting task fetch for tenant: ${tenantId}`);
 
